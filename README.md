@@ -48,19 +48,29 @@ Useful environment variables:
 - `CURSOR_AGENT_PROXY_CONFIG`: alternate env file path. Defaults to this project's `config.env`.
 - `CURSOR_AGENT_HTTP2_PROXY=0`: disable the HTTP/2 CONNECT shim.
 
-## Install Alias
+## Replace `cursor-agent`
 
-For convenience:
+To make `cursor-agent` use this wrapper directly:
 
 ```bash
-ln -sf /repo/root/cursor-agent-proxy/bin/cursor-agent-proxy ~/.local/bin/cursor-agent-proxy
+/repo/root/cursor-agent-proxy/scripts/install-local
 ```
 
 Then run:
 
 ```bash
-cursor-agent-proxy status
-cursor-agent-proxy --print --mode ask --trust "Reply exactly: proxy-smoke-ok"
+cursor-agent status
+cursor-agent --print --mode ask --trust "Reply exactly: proxy-smoke-ok"
+```
+
+The installer records the original `cursor-agent` target in local `config.env` as
+`CURSOR_AGENT_BIN`, then replaces `~/.local/bin/cursor-agent` with a symlink to
+`bin/cursor-agent-proxy`.
+
+To restore the original symlink:
+
+```bash
+/repo/root/cursor-agent-proxy/scripts/uninstall-local
 ```
 
 ## Limitations

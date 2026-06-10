@@ -7,6 +7,8 @@
     "cursor-agent-proxy": "./bin/cursor-agent-proxy"
   },
   "scripts": {
+    "install:local": "./scripts/install-local",
+    "uninstall:local": "./scripts/uninstall-local",
     "smoke:status": "./bin/cursor-agent-proxy status",
     "smoke:ask": "./bin/cursor-agent-proxy --print --mode ask --trust \"Reply exactly: proxy-smoke-ok\""
   },

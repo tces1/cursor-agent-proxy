@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+BIN_DIR="${CURSOR_AGENT_PROXY_BIN_DIR:-$HOME/.local/bin}"
+LINK_PATH="$BIN_DIR/cursor-agent"
+PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." >/dev/null 2>&1 && pwd)"
+WRAPPER_PATH="$PROJECT_ROOT/bin/cursor-agent-proxy"
+CONFIG_FILE="${CURSOR_AGENT_PROXY_CONFIG:-$PROJECT_ROOT/config.env}"
+
+if [ ! -L "$LINK_PATH" ] || [ "$(readlink -f "$LINK_PATH")" != "$(readlink -f "$WRAPPER_PATH")" ]; then
+  echo "cursor-agent proxy is not installed at $LINK_PATH" >&2
+  exit 1
+fi
+
+ORIGINAL_TARGET=""
+if [ -f "$CONFIG_FILE" ]; then
+  ORIGINAL_TARGET="$(grep -E '^CURSOR_AGENT_BIN=' "$CONFIG_FILE" | tail -n 1 | cut -d= -f2-)"
+fi
+
+if [ -z "$ORIGINAL_TARGET" ]; then
+  echo "Cannot restore cursor-agent: CURSOR_AGENT_BIN is missing from $CONFIG_FILE" >&2
+  exit 1
+fi
+
+ln -sfn "$ORIGINAL_TARGET" "$LINK_PATH"
+
+echo "Restored cursor-agent:"
+echo "  $LINK_PATH -> $ORIGINAL_TARGET"

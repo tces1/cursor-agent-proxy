@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+BIN_DIR="${CURSOR_AGENT_PROXY_BIN_DIR:-$HOME/.local/bin}"
+LINK_PATH="$BIN_DIR/cursor-agent"
+WRAPPER_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." >/dev/null 2>&1 && pwd)/bin/cursor-agent-proxy"
+CONFIG_FILE="${CURSOR_AGENT_PROXY_CONFIG:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." >/dev/null 2>&1 && pwd)/config.env}"
+
+mkdir -p "$BIN_DIR"
+
+if [ -e "$LINK_PATH" ] || [ -L "$LINK_PATH" ]; then
+  ORIGINAL_TARGET="$(readlink -f "$LINK_PATH")"
+else
+  ORIGINAL_TARGET=""
+fi
+
+if [ -n "$ORIGINAL_TARGET" ] && [ "$ORIGINAL_TARGET" != "$(readlink -f "$WRAPPER_PATH")" ]; then
+  if [ ! -f "$CONFIG_FILE" ]; then
+    cp "$(dirname "$CONFIG_FILE")/config.env.example" "$CONFIG_FILE"
+  fi
+  if ! grep -q '^CURSOR_AGENT_BIN=' "$CONFIG_FILE"; then
+    printf '\nCURSOR_AGENT_BIN=%s\n' "$ORIGINAL_TARGET" >>"$CONFIG_FILE"
+  fi
+fi
+
+ln -sfn "$WRAPPER_PATH" "$LINK_PATH"
+
+echo "Installed cursor-agent proxy:"
+echo "  $LINK_PATH -> $WRAPPER_PATH"
+if [ -n "${ORIGINAL_TARGET:-}" ]; then
+  echo "  original cursor-agent: $ORIGINAL_TARGET"
+fi
