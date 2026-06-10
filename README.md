@@ -1,6 +1,28 @@
 # cursor-agent-proxy
 
-Wrapper for launching `cursor-agent` behind an HTTP proxy.
+`cursor-agent-proxy` is a small wrapper that launches `cursor-agent` behind an
+HTTP proxy and forces Cursor Agent's Node HTTP/2 traffic through that proxy.
+
+## 中文说明
+
+在某些公司网络、堡垒机、CI 环境或受限出口环境中，`cursor-agent` 可能能
+登录 Cursor，但在使用 Anthropic 相关模型或需要连接 Cursor 后端流式通道时
+失败。这类问题通常不是 API key 或模型权限本身的问题，而是 `cursor-agent`
+内部的 Node HTTP/2 连接没有按预期走企业代理。
+
+这个工具用于把 `cursor-agent` 包一层启动：
+
+- 统一设置 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY`、`NO_PROXY`
+- 启用 `NODE_USE_ENV_PROXY=1`
+- 通过 `NODE_OPTIONS --import` 预加载 HTTP/2 CONNECT shim
+- 最后把所有参数原样交给真正的 `cursor-agent`
+
+适合的场景：
+
+- 直接运行 `cursor-agent` 时，某些 Anthropic 模型请求失败或一直连不上。
+- 普通代理环境变量对 `cursor-agent` 不生效，尤其是 agent stream / HTTP/2 通道。
+- 希望把 `cursor-agent` 强制固定走企业 HTTP 代理。
+- 希望替换本机 `cursor-agent` 命令，但仍自动跟随 Cursor Agent 官方版本更新。
 
 It bootstraps the same approach validated in `domain_agent`:
 
@@ -8,6 +30,10 @@ It bootstraps the same approach validated in `domain_agent`:
 - exports `NODE_USE_ENV_PROXY=1`
 - preloads `lib/cursor_http2_proxy_patch.mjs` through `NODE_OPTIONS`
 - execs the real `cursor-agent` with all original arguments
+
+Use it when normal `cursor-agent` networking is not enough, especially when
+Anthropic-backed model requests or Cursor Agent streaming connections must be
+forced through an outbound HTTP proxy.
 
 ## Quick Start
 
@@ -20,6 +46,7 @@ Run a smoke test:
 ```bash
 /repo/root/cursor-agent-proxy/bin/cursor-agent-proxy \
   --print --mode ask --trust \
+  --model claude-opus-4-8 \
   "Reply exactly: proxy-smoke-ok"
 ```
 
@@ -49,6 +76,42 @@ Useful environment variables:
 - `CURSOR_AGENT_PROXY_CONFIG`: alternate env file path. Defaults to this project's `config.env`.
 - `CURSOR_AGENT_HTTP2_PROXY=0`: disable the HTTP/2 CONNECT shim.
 
+## 中文快速使用
+
+创建本地配置：
+
+```bash
+cp config.env.example config.env
+$EDITOR config.env
+```
+
+临时验证：
+
+```bash
+/repo/root/cursor-agent-proxy/bin/cursor-agent-proxy status
+/repo/root/cursor-agent-proxy/bin/cursor-agent-proxy \
+  --print --mode ask --trust \
+  --model claude-opus-4-8 \
+  "Reply exactly: proxy-smoke-ok"
+```
+
+这里的 `--model claude-opus-4-8` 用来显式验证 Opus 模型请求也会经过
+wrapper 注入的代理通路。如果你的账号可用模型 ID 不同，可以先运行
+`cursor-agent models` 查看再替换。
+
+如果验证通过，可以替换本机 `cursor-agent`：
+
+```bash
+/repo/root/cursor-agent-proxy/scripts/install-local
+```
+
+之后直接使用原命令即可：
+
+```bash
+cursor-agent status
+cursor-agent --print --mode ask --trust --model claude-opus-4-8 "hello"
+```
+
 ## Replace `cursor-agent`
 
 To make `cursor-agent` use this wrapper directly:
@@ -61,7 +124,7 @@ Then run:
 
 ```bash
 cursor-agent status
-cursor-agent --print --mode ask --trust "Reply exactly: proxy-smoke-ok"
+cursor-agent --print --mode ask --trust --model claude-opus-4-8 "Reply exactly: proxy-smoke-ok"
 ```
 
 The wrapper auto-selects the latest official Cursor Agent executable under
