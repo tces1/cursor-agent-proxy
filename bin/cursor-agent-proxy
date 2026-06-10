@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_PATH="${BASH_SOURCE[0]}"
+while [ -L "$SCRIPT_PATH" ]; do
+  SCRIPT_DIR="$(cd -P "$(dirname "$SCRIPT_PATH")" >/dev/null 2>&1 && pwd)"
+  SCRIPT_PATH="$(readlink "$SCRIPT_PATH")"
+  [[ "$SCRIPT_PATH" != /* ]] && SCRIPT_PATH="$SCRIPT_DIR/$SCRIPT_PATH"
+done
+
+SCRIPT_DIR="$(cd -P "$(dirname "$SCRIPT_PATH")" >/dev/null 2>&1 && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." >/dev/null 2>&1 && pwd)"
+PATCH_FILE="$PROJECT_ROOT/lib/cursor_http2_proxy_patch.mjs"
+CONFIG_FILE="${CURSOR_AGENT_PROXY_CONFIG:-$PROJECT_ROOT/config.env}"
+REAL_CURSOR_AGENT="${CURSOR_AGENT_BIN:-cursor-agent}"
+
+if [ -f "$CONFIG_FILE" ]; then
+  set -a
+  # shellcheck disable=SC1090
+  source "$CONFIG_FILE"
+  set +a
+fi
+
+if [ ! -f "$PATCH_FILE" ]; then
+  echo "cursor-agent-proxy: missing HTTP/2 patch file: $PATCH_FILE" >&2
+  exit 1
+fi
+
+PROXY_URL="${CURSOR_AGENT_PROXY:-${HTTPS_PROXY:-${HTTP_PROXY:-${ALL_PROXY:-}}}}"
+NO_PROXY_VALUE="${CURSOR_AGENT_NO_PROXY:-${NO_PROXY:-127.0.0.1,localhost}}"
+
+if [ -n "$PROXY_URL" ]; then
+  export HTTP_PROXY="${HTTP_PROXY:-$PROXY_URL}"
+  export HTTPS_PROXY="${HTTPS_PROXY:-$PROXY_URL}"
+  export ALL_PROXY="${ALL_PROXY:-$PROXY_URL}"
+  export http_proxy="${http_proxy:-$HTTP_PROXY}"
+  export https_proxy="${https_proxy:-$HTTPS_PROXY}"
+  export all_proxy="${all_proxy:-$ALL_PROXY}"
+  export NO_PROXY="$NO_PROXY_VALUE"
+  export no_proxy="${no_proxy:-$NO_PROXY_VALUE}"
+  export NODE_USE_ENV_PROXY="${NODE_USE_ENV_PROXY:-1}"
+fi
+
+IMPORT_OPTION="--import $PATCH_FILE"
+case " ${NODE_OPTIONS:-} " in
+  *" $IMPORT_OPTION "*) ;;
+  *) export NODE_OPTIONS="${IMPORT_OPTION}${NODE_OPTIONS:+ $NODE_OPTIONS}" ;;
+esac
+
+exec "$REAL_CURSOR_AGENT" "$@"

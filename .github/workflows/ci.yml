@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Validate shell wrapper syntax
+        run: bash -n bin/cursor-agent-proxy
+
+      - name: Verify wrapper forwards arguments
+        run: |
+          output="$(
+            CURSOR_AGENT_PROXY=http://proxy.example:8080 \
+            CURSOR_AGENT_BIN=echo \
+            ./bin/cursor-agent-proxy smoke-test
+          )"
+          test "$output" = "smoke-test"
+
+      - name: Verify HTTP/2 patch preload
+        run: |
+          node --import ./lib/cursor_http2_proxy_patch.mjs \
+            -e "import http2 from 'node:http2'; if (typeof http2.connect !== 'function') process.exit(1)"

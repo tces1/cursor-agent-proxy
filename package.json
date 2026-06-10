@@ -1,0 +1,14 @@
+{
+  "name": "cursor-agent-proxy",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Launch cursor-agent through an HTTP proxy with an HTTP/2 CONNECT shim.",
+  "bin": {
+    "cursor-agent-proxy": "./bin/cursor-agent-proxy"
+  },
+  "scripts": {
+    "smoke:status": "./bin/cursor-agent-proxy status",
+    "smoke:ask": "./bin/cursor-agent-proxy --print --mode ask --trust \"Reply exactly: proxy-smoke-ok\""
+  },
+  "license": "UNLICENSED"
+}
