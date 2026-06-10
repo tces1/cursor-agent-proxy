@@ -1,150 +1,111 @@
 # cursor-agent-proxy
 
-`cursor-agent-proxy` is a small wrapper that launches `cursor-agent` behind an
-HTTP proxy and forces Cursor Agent's Node HTTP/2 traffic through that proxy.
+中文文档为主。English version: [README.en.md](README.en.md)
 
-## 中文说明
+`cursor-agent-proxy` 是一个 `cursor-agent` 启动 wrapper，用来在受限网络中强制 Cursor Agent 的 Node HTTP/2 连接走 HTTP 代理。
 
-在某些公司网络、堡垒机、CI 环境或受限出口环境中，`cursor-agent` 可能能
-登录 Cursor，但在使用 Anthropic 相关模型或需要连接 Cursor 后端流式通道时
-失败。这类问题通常不是 API key 或模型权限本身的问题，而是 `cursor-agent`
-内部的 Node HTTP/2 连接没有按预期走企业代理。
+## 解决什么问题
 
-这个工具用于把 `cursor-agent` 包一层启动：
+在公司网络、堡垒机、CI 或受限出口环境里，`cursor-agent` 可能可以登录 Cursor，但在使用 Anthropic 相关模型时失败，或者在 Cursor Agent 的流式通道上一直连不上。
 
-- 统一设置 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY`、`NO_PROXY`
-- 启用 `NODE_USE_ENV_PROXY=1`
-- 通过 `NODE_OPTIONS --import` 预加载 HTTP/2 CONNECT shim
-- 最后把所有参数原样交给真正的 `cursor-agent`
+这种情况通常不是 API key 或模型权限本身的问题，而是普通 `HTTP_PROXY` / `HTTPS_PROXY` 环境变量没有覆盖到 `cursor-agent` 内部的 Node HTTP/2 连接。
 
-适合的场景：
+这个工具会：
 
-- 直接运行 `cursor-agent` 时，某些 Anthropic 模型请求失败或一直连不上。
-- 普通代理环境变量对 `cursor-agent` 不生效，尤其是 agent stream / HTTP/2 通道。
-- 希望把 `cursor-agent` 强制固定走企业 HTTP 代理。
-- 希望替换本机 `cursor-agent` 命令，但仍自动跟随 Cursor Agent 官方版本更新。
+- 设置 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY`、`NO_PROXY` 及对应小写变量。
+- 设置 `NODE_USE_ENV_PROXY=1`。
+- 通过 `NODE_OPTIONS --import` 预加载 HTTP/2 CONNECT shim。
+- 最后把所有参数原样转交给真正的 `cursor-agent`。
 
-It bootstraps the same approach validated in `domain_agent`:
+## 适用场景
 
-- exports `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`, `NO_PROXY`, and lowercase variants
-- exports `NODE_USE_ENV_PROXY=1`
-- preloads `lib/cursor_http2_proxy_patch.mjs` through `NODE_OPTIONS`
-- execs the real `cursor-agent` with all original arguments
+- 直接运行 `cursor-agent` 时，Opus / Anthropic 相关模型请求失败。
+- `cursor-agent status` 正常，但 `--print` 请求模型时卡住或报网络错误。
+- 普通代理环境变量对 agent stream / HTTP/2 通道不生效。
+- 需要把 `cursor-agent` 强制固定走企业 HTTP 代理。
+- 想替换本机 `cursor-agent` 命令，同时仍跟随 Cursor Agent 官方版本更新。
 
-Use it when normal `cursor-agent` networking is not enough, especially when
-Anthropic-backed model requests or Cursor Agent streaming connections must be
-forced through an outbound HTTP proxy.
+## 安装
 
-## Quick Start
-
-```bash
-/repo/root/cursor-agent-proxy/bin/cursor-agent-proxy status
-```
-
-Run a smoke test:
-
-```bash
-/repo/root/cursor-agent-proxy/bin/cursor-agent-proxy \
-  --print --mode ask --trust \
-  --model claude-opus-4-8 \
-  "Reply exactly: proxy-smoke-ok"
-```
-
-## Configure
-
-The wrapper reads `config.env` by default. Start from the example file:
+克隆后创建本地配置：
 
 ```bash
 cp config.env.example config.env
 $EDITOR config.env
 ```
 
-You can also override values per command:
+至少配置代理地址：
 
 ```bash
-CURSOR_AGENT_PROXY=http://proxy.example:8080 \
-CURSOR_AGENT_NO_PROXY=127.0.0.1,localhost,.example.com \
-/repo/root/cursor-agent-proxy/bin/cursor-agent-proxy status
+CURSOR_AGENT_PROXY=http://proxy.example:8080
+CURSOR_AGENT_NO_PROXY=127.0.0.1,localhost
 ```
 
-Useful environment variables:
+## 临时验证
 
-- `CURSOR_AGENT_PROXY`: proxy URL used for HTTP, HTTPS, and ALL proxy variables.
-- `CURSOR_AGENT_NO_PROXY`: comma-separated no-proxy hosts.
-- `CURSOR_AGENT_VERSIONS_DIR`: official Cursor Agent versions directory. Defaults to `~/.local/share/cursor-agent/versions`.
-- `CURSOR_AGENT_BIN`: pin a specific real `cursor-agent` binary. When unset, the wrapper auto-selects the latest executable under `CURSOR_AGENT_VERSIONS_DIR`.
-- `CURSOR_AGENT_PROXY_CONFIG`: alternate env file path. Defaults to this project's `config.env`.
-- `CURSOR_AGENT_HTTP2_PROXY=0`: disable the HTTP/2 CONNECT shim.
-
-## 中文快速使用
-
-创建本地配置：
+先不替换系统里的 `cursor-agent`，直接运行 wrapper：
 
 ```bash
-cp config.env.example config.env
-$EDITOR config.env
+./bin/cursor-agent-proxy status
 ```
 
-临时验证：
+用 Opus 做一次 smoke test：
 
 ```bash
-/repo/root/cursor-agent-proxy/bin/cursor-agent-proxy status
-/repo/root/cursor-agent-proxy/bin/cursor-agent-proxy \
+./bin/cursor-agent-proxy \
   --print --mode ask --trust \
   --model claude-opus-4-8 \
   "Reply exactly: proxy-smoke-ok"
 ```
 
-这里的 `--model claude-opus-4-8` 用来显式验证 Opus 模型请求也会经过
-wrapper 注入的代理通路。如果你的账号可用模型 ID 不同，可以先运行
-`cursor-agent models` 查看再替换。
-
-如果验证通过，可以替换本机 `cursor-agent`：
+如果你的账号可用模型 ID 不同，先查看模型列表：
 
 ```bash
-/repo/root/cursor-agent-proxy/scripts/install-local
+./bin/cursor-agent-proxy models
 ```
 
-之后直接使用原命令即可：
+## 替换本机 `cursor-agent`
+
+验证通过后，可以让日常的 `cursor-agent` 命令直接走这个 wrapper：
+
+```bash
+./scripts/install-local
+```
+
+之后照常使用：
 
 ```bash
 cursor-agent status
 cursor-agent --print --mode ask --trust --model claude-opus-4-8 "hello"
 ```
 
-## Replace `cursor-agent`
-
-To make `cursor-agent` use this wrapper directly:
+恢复原始链接：
 
 ```bash
-/repo/root/cursor-agent-proxy/scripts/install-local
+./scripts/uninstall-local
 ```
 
-Then run:
+## Cursor Agent 更新
+
+wrapper 默认会从 `~/.local/share/cursor-agent/versions` 自动选择最新的官方 `cursor-agent` 可执行文件，所以 Cursor Agent 正常更新后，下次启动会自动使用新版本。
+
+如果 Cursor Agent 的更新过程覆盖了 `~/.local/bin/cursor-agent` 链接，再运行一次安装脚本即可：
 
 ```bash
-cursor-agent status
-cursor-agent --print --mode ask --trust --model claude-opus-4-8 "Reply exactly: proxy-smoke-ok"
+./scripts/install-local
 ```
 
-The wrapper auto-selects the latest official Cursor Agent executable under
-`~/.local/share/cursor-agent/versions`, so normal Cursor Agent updates are picked
-up on the next launch. The installer records the original `cursor-agent` target
-in local `config.env` as `ORIGINAL_CURSOR_AGENT_BIN` for rollback only, then
-replaces `~/.local/bin/cursor-agent` with a symlink to `bin/cursor-agent-proxy`.
+## 配置项
 
-If a Cursor Agent update overwrites the symlink, run the installer again:
+- `CURSOR_AGENT_PROXY`：HTTP 代理地址，会用于 HTTP、HTTPS 和 ALL proxy 变量。
+- `CURSOR_AGENT_NO_PROXY`：不走代理的 host 列表，逗号分隔。
+- `CURSOR_AGENT_VERSIONS_DIR`：Cursor Agent 官方版本目录，默认 `~/.local/share/cursor-agent/versions`。
+- `CURSOR_AGENT_BIN`：固定使用某个真实 `cursor-agent` 可执行文件；设置后会关闭自动选择最新版本。
+- `CURSOR_AGENT_PROXY_CONFIG`：指定其它配置文件路径，默认读取项目内 `config.env`。
+- `CURSOR_AGENT_HTTP2_PROXY=0`：关闭 HTTP/2 CONNECT shim，只保留普通代理环境变量。
 
-```bash
-/repo/root/cursor-agent-proxy/scripts/install-local
-```
+## 限制
 
-To restore the original symlink:
-
-```bash
-/repo/root/cursor-agent-proxy/scripts/uninstall-local
-```
-
-## Limitations
-
-The HTTP/2 patch supports plain `http://` proxies that allow `CONNECT` tunneling to Cursor backend hosts. It does not currently add `Proxy-Authorization` headers for authenticated proxies.
+- 目前支持 `http://` 代理，并通过 HTTP `CONNECT` 建立到 Cursor 后端的 TLS / HTTP/2 通道。
+- 代理需要允许连接 Cursor 后端域名，例如 `api2.cursor.sh` 和 `*.cursor.sh`。
+- 当前 shim 不会自动添加 `Proxy-Authorization`，需要认证的代理暂不支持。
