@@ -18,8 +18,8 @@ if [ -n "$ORIGINAL_TARGET" ] && [ "$ORIGINAL_TARGET" != "$(readlink -f "$WRAPPER
   if [ ! -f "$CONFIG_FILE" ]; then
     cp "$(dirname "$CONFIG_FILE")/config.env.example" "$CONFIG_FILE"
   fi
-  if ! grep -q '^CURSOR_AGENT_BIN=' "$CONFIG_FILE"; then
-    printf '\nCURSOR_AGENT_BIN=%s\n' "$ORIGINAL_TARGET" >>"$CONFIG_FILE"
+  if ! grep -q '^ORIGINAL_CURSOR_AGENT_BIN=' "$CONFIG_FILE"; then
+    printf '\nORIGINAL_CURSOR_AGENT_BIN=%s\n' "$ORIGINAL_TARGET" >>"$CONFIG_FILE"
   fi
 fi
 

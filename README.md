@@ -44,7 +44,8 @@ Useful environment variables:
 
 - `CURSOR_AGENT_PROXY`: proxy URL used for HTTP, HTTPS, and ALL proxy variables.
 - `CURSOR_AGENT_NO_PROXY`: comma-separated no-proxy hosts.
-- `CURSOR_AGENT_BIN`: real `cursor-agent` binary to execute. Defaults to `cursor-agent` from `PATH`.
+- `CURSOR_AGENT_VERSIONS_DIR`: official Cursor Agent versions directory. Defaults to `~/.local/share/cursor-agent/versions`.
+- `CURSOR_AGENT_BIN`: pin a specific real `cursor-agent` binary. When unset, the wrapper auto-selects the latest executable under `CURSOR_AGENT_VERSIONS_DIR`.
 - `CURSOR_AGENT_PROXY_CONFIG`: alternate env file path. Defaults to this project's `config.env`.
 - `CURSOR_AGENT_HTTP2_PROXY=0`: disable the HTTP/2 CONNECT shim.
 
@@ -63,9 +64,17 @@ cursor-agent status
 cursor-agent --print --mode ask --trust "Reply exactly: proxy-smoke-ok"
 ```
 
-The installer records the original `cursor-agent` target in local `config.env` as
-`CURSOR_AGENT_BIN`, then replaces `~/.local/bin/cursor-agent` with a symlink to
-`bin/cursor-agent-proxy`.
+The wrapper auto-selects the latest official Cursor Agent executable under
+`~/.local/share/cursor-agent/versions`, so normal Cursor Agent updates are picked
+up on the next launch. The installer records the original `cursor-agent` target
+in local `config.env` as `ORIGINAL_CURSOR_AGENT_BIN` for rollback only, then
+replaces `~/.local/bin/cursor-agent` with a symlink to `bin/cursor-agent-proxy`.
+
+If a Cursor Agent update overwrites the symlink, run the installer again:
+
+```bash
+/repo/root/cursor-agent-proxy/scripts/install-local
+```
 
 To restore the original symlink:
 

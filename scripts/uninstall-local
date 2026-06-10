@@ -14,11 +14,14 @@ fi
 
 ORIGINAL_TARGET=""
 if [ -f "$CONFIG_FILE" ]; then
-  ORIGINAL_TARGET="$(grep -E '^CURSOR_AGENT_BIN=' "$CONFIG_FILE" | tail -n 1 | cut -d= -f2-)"
+  ORIGINAL_TARGET="$(grep -E '^ORIGINAL_CURSOR_AGENT_BIN=' "$CONFIG_FILE" | tail -n 1 | cut -d= -f2-)"
+  if [ -z "$ORIGINAL_TARGET" ]; then
+    ORIGINAL_TARGET="$(grep -E '^CURSOR_AGENT_BIN=' "$CONFIG_FILE" | tail -n 1 | cut -d= -f2-)"
+  fi
 fi
 
 if [ -z "$ORIGINAL_TARGET" ]; then
-  echo "Cannot restore cursor-agent: CURSOR_AGENT_BIN is missing from $CONFIG_FILE" >&2
+  echo "Cannot restore cursor-agent: ORIGINAL_CURSOR_AGENT_BIN is missing from $CONFIG_FILE" >&2
   exit 1
 fi
 
