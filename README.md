@@ -1,6 +1,6 @@
 # cursor-agent-proxy
 
-中文文档为主。English version: [README.en.md](README.en.md)
+English version: [README.en.md](README.en.md)
 
 `cursor-agent-proxy` 是一个 `cursor-agent` 启动 wrapper，用来在受限网络中强制 Cursor Agent 的 Node HTTP/2 连接走 HTTP 代理。
 
