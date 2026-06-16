@@ -23,7 +23,7 @@ English version: [README.en.md](README.en.md)
 - `cursor-agent status` 正常，但 `--print` 请求模型时卡住或报网络错误。
 - 普通代理环境变量对 agent stream / HTTP/2 通道不生效。
 - 需要把 `cursor-agent` 强制固定走企业 HTTP 代理。
-- 想替换本机 `cursor-agent` 命令，同时仍跟随 Cursor Agent 官方版本更新。
+- 想让本机 `cursor-agent` 命令走代理，同时仍跟随 Cursor Agent 官方版本更新。
 
 ## 安装
 
@@ -64,12 +64,20 @@ CURSOR_AGENT_NO_PROXY=127.0.0.1,localhost
 ./bin/cursor-agent-proxy models
 ```
 
-## 替换本机 `cursor-agent`
+## 安装（写入 shell 配置）
 
-验证通过后，可以让日常的 `cursor-agent` 命令直接走这个 wrapper：
+验证通过后，运行安装脚本。它会把 `cursor-agent` 和 `agent` 两个别名写入你的 shell 配置（zsh 用 `~/.zshrc`，bash 用 `~/.bashrc`），让日常命令直接走这个 wrapper：
 
 ```bash
 ./scripts/install-local
+```
+
+之所以用 shell 别名、而不是替换 `~/.local/bin` 里的软链：Cursor Agent 自更新会 `rm -f` 并重建 `~/.local/bin/{agent,cursor-agent}`，软链方式每次升级都会被覆盖；写进 shell 配置则升级动不了。
+
+让别名生效（或新开终端）：
+
+```bash
+source ~/.zshrc   # bash 用 source ~/.bashrc
 ```
 
 之后照常使用：
@@ -79,21 +87,25 @@ cursor-agent status
 cursor-agent --print --mode ask --trust --model claude-opus-4-8 "hello"
 ```
 
-恢复原始链接：
+移除别名：
 
 ```bash
 ./scripts/uninstall-local
 ```
 
-## Cursor Agent 更新
-
-wrapper 默认会从 `~/.local/share/cursor-agent/versions` 自动选择最新的官方 `cursor-agent` 可执行文件，所以 Cursor Agent 正常更新后，下次启动会自动使用新版本。
-
-如果 Cursor Agent 的更新过程覆盖了 `~/.local/bin/cursor-agent` 链接，再运行一次安装脚本即可：
+如需写入指定的配置文件，可设置 `CURSOR_AGENT_PROXY_RC`：
 
 ```bash
-./scripts/install-local
+CURSOR_AGENT_PROXY_RC=~/.zshrc ./scripts/install-local
 ```
+
+## Cursor Agent 更新
+
+不用做任何事。真正的 `cursor-agent` 会照常自更新，把新版本下载到 `~/.local/share/cursor-agent/versions`；wrapper 默认自动选用该目录下最新的可执行文件，所以下次启动就会用上新版本。
+
+别名方式不依赖 `~/.local/bin` 的软链，所以升级覆盖软链也没关系，**升级后不需要再跑 `install-local`**。
+
+如果你在 `config.env` 里设置了 `CURSOR_AGENT_BIN`，则会固定使用该版本、不再自动跟随。
 
 ## 配置项
 

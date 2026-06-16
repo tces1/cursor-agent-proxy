@@ -1,31 +1,56 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-BIN_DIR="${CURSOR_AGENT_PROXY_BIN_DIR:-$HOME/.local/bin}"
-LINK_PATH="$BIN_DIR/cursor-agent"
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." >/dev/null 2>&1 && pwd)"
 WRAPPER_PATH="$PROJECT_ROOT/bin/cursor-agent-proxy"
-CONFIG_FILE="${CURSOR_AGENT_PROXY_CONFIG:-$PROJECT_ROOT/config.env}"
 
-if [ ! -L "$LINK_PATH" ] || [ "$(readlink -f "$LINK_PATH")" != "$(readlink -f "$WRAPPER_PATH")" ]; then
-  echo "cursor-agent proxy is not installed at $LINK_PATH" >&2
-  exit 1
-fi
+BEGIN_MARK="# >>> cursor-agent-proxy >>>"
+END_MARK="# <<< cursor-agent-proxy <<<"
 
-ORIGINAL_TARGET=""
-if [ -f "$CONFIG_FILE" ]; then
-  ORIGINAL_TARGET="$(grep -E '^ORIGINAL_CURSOR_AGENT_BIN=' "$CONFIG_FILE" | tail -n 1 | cut -d= -f2-)"
-  if [ -z "$ORIGINAL_TARGET" ]; then
-    ORIGINAL_TARGET="$(grep -E '^CURSOR_AGENT_BIN=' "$CONFIG_FILE" | tail -n 1 | cut -d= -f2-)"
+removed_any=0
+for RC_FILE in \
+  "${CURSOR_AGENT_PROXY_RC:-}" \
+  "$HOME/.zshrc" \
+  "$HOME/.bashrc" \
+  "$HOME/.bash_profile" \
+  "$HOME/.profile"; do
+  [ -n "$RC_FILE" ] || continue
+  [ -f "$RC_FILE" ] || continue
+  grep -qF "$BEGIN_MARK" "$RC_FILE" || continue
+
+  tmp="$(mktemp)"
+  awk -v b="$BEGIN_MARK" -v e="$END_MARK" '
+    $0==b {inblk=1; next}
+    $0==e {inblk=0; next}
+    !inblk {print}
+  ' "$RC_FILE" >"$tmp"
+  cat "$tmp" >"$RC_FILE"
+  rm -f "$tmp"
+
+  echo "Removed cursor-agent proxy aliases from: $RC_FILE"
+  removed_any=1
+done
+
+# Legacy cleanup: older versions of this tool symlinked ~/.local/bin/cursor-agent
+# to the wrapper. If that symlink is still present, restore it to the latest real
+# cursor-agent so the bare command keeps working.
+LINK_PATH="${CURSOR_AGENT_PROXY_BIN_DIR:-$HOME/.local/bin}/cursor-agent"
+if [ -L "$LINK_PATH" ] && [ "$(readlink -f "$LINK_PATH")" = "$(readlink -f "$WRAPPER_PATH")" ]; then
+  versions_dir="${CURSOR_AGENT_VERSIONS_DIR:-$HOME/.local/share/cursor-agent/versions}"
+  latest=""
+  for candidate in "$versions_dir"/*/cursor-agent; do
+    [ -x "$candidate" ] || continue
+    latest="$candidate"
+  done
+  if [ -n "$latest" ]; then
+    ln -sfn "$latest" "$LINK_PATH"
+    echo "Restored legacy symlink: $LINK_PATH -> $latest"
   fi
 fi
 
-if [ -z "$ORIGINAL_TARGET" ]; then
-  echo "Cannot restore cursor-agent: ORIGINAL_CURSOR_AGENT_BIN is missing from $CONFIG_FILE" >&2
-  exit 1
+if [ "$removed_any" -eq 0 ]; then
+  echo "No cursor-agent proxy alias block found in shell rc files."
 fi
 
-ln -sfn "$ORIGINAL_TARGET" "$LINK_PATH"
-
-echo "Restored cursor-agent:"
-echo "  $LINK_PATH -> $ORIGINAL_TARGET"
+echo
+echo "Open a new shell or re-source your rc file to apply."

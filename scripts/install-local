@@ -1,32 +1,82 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-BIN_DIR="${CURSOR_AGENT_PROXY_BIN_DIR:-$HOME/.local/bin}"
-LINK_PATH="$BIN_DIR/cursor-agent"
-WRAPPER_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." >/dev/null 2>&1 && pwd)/bin/cursor-agent-proxy"
-CONFIG_FILE="${CURSOR_AGENT_PROXY_CONFIG:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." >/dev/null 2>&1 && pwd)/config.env}"
+PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." >/dev/null 2>&1 && pwd)"
+WRAPPER_PATH="$PROJECT_ROOT/bin/cursor-agent-proxy"
 
-mkdir -p "$BIN_DIR"
+BEGIN_MARK="# >>> cursor-agent-proxy >>>"
+END_MARK="# <<< cursor-agent-proxy <<<"
 
-if [ -e "$LINK_PATH" ] || [ -L "$LINK_PATH" ]; then
-  ORIGINAL_TARGET="$(readlink -f "$LINK_PATH")"
-else
-  ORIGINAL_TARGET=""
+if [ ! -x "$WRAPPER_PATH" ]; then
+  echo "cursor-agent-proxy: wrapper not found or not executable: $WRAPPER_PATH" >&2
+  exit 1
 fi
 
-if [ -n "$ORIGINAL_TARGET" ] && [ "$ORIGINAL_TARGET" != "$(readlink -f "$WRAPPER_PATH")" ]; then
-  if [ ! -f "$CONFIG_FILE" ]; then
-    cp "$(dirname "$CONFIG_FILE")/config.env.example" "$CONFIG_FILE"
+resolve_rc_file() {
+  if [ -n "${CURSOR_AGENT_PROXY_RC:-}" ]; then
+    printf '%s\n' "$CURSOR_AGENT_PROXY_RC"
+    return
   fi
-  if ! grep -q '^ORIGINAL_CURSOR_AGENT_BIN=' "$CONFIG_FILE"; then
-    printf '\nORIGINAL_CURSOR_AGENT_BIN=%s\n' "$ORIGINAL_TARGET" >>"$CONFIG_FILE"
-  fi
-fi
+  case "$(basename "${SHELL:-}")" in
+    zsh)
+      printf '%s\n' "$HOME/.zshrc"
+      ;;
+    bash)
+      if [ -f "$HOME/.bashrc" ]; then
+        printf '%s\n' "$HOME/.bashrc"
+      else
+        printf '%s\n' "$HOME/.bash_profile"
+      fi
+      ;;
+    *)
+      if [ -f "$HOME/.zshrc" ]; then
+        printf '%s\n' "$HOME/.zshrc"
+      elif [ -f "$HOME/.bashrc" ]; then
+        printf '%s\n' "$HOME/.bashrc"
+      else
+        printf '%s\n' "$HOME/.profile"
+      fi
+      ;;
+  esac
+}
 
-ln -sfn "$WRAPPER_PATH" "$LINK_PATH"
+RC_FILE="$(resolve_rc_file)"
+mkdir -p "$(dirname "$RC_FILE")"
+touch "$RC_FILE"
 
-echo "Installed cursor-agent proxy:"
-echo "  $LINK_PATH -> $WRAPPER_PATH"
-if [ -n "${ORIGINAL_TARGET:-}" ]; then
-  echo "  original cursor-agent: $ORIGINAL_TARGET"
-fi
+# Aliases are used instead of replacing the ~/.local/bin symlinks because the
+# Cursor Agent self-update does `rm -f` + recreates ~/.local/bin/{agent,
+# cursor-agent} on every upgrade, which would clobber a symlink install. A shell
+# rc entry is never touched by the updater, and the wrapper still auto-follows
+# the latest version under ~/.local/share/cursor-agent/versions.
+block="$(cat <<EOF
+$BEGIN_MARK
+# Managed by cursor-agent-proxy/scripts/install-local. Re-run it to update paths.
+alias cursor-agent='$WRAPPER_PATH'
+alias agent='$WRAPPER_PATH'
+$END_MARK
+EOF
+)"
+
+tmp="$(mktemp)"
+# Drop any previously managed block so re-running updates in place.
+awk -v b="$BEGIN_MARK" -v e="$END_MARK" '
+  $0==b {inblk=1; next}
+  $0==e {inblk=0; next}
+  !inblk {print}
+' "$RC_FILE" >"$tmp"
+
+{
+  # Trim trailing blank lines, then re-append with a single separating newline so
+  # repeated installs stay idempotent instead of piling up blank lines.
+  awk 'NF{last=NR} {line[NR]=$0} END{for (i=1; i<=last; i++) print line[i]}' "$tmp"
+  printf '\n%s\n' "$block"
+} >"$RC_FILE"
+rm -f "$tmp"
+
+echo "Installed cursor-agent proxy aliases into: $RC_FILE"
+echo "  cursor-agent -> $WRAPPER_PATH"
+echo "  agent        -> $WRAPPER_PATH"
+echo
+echo "Apply now (or open a new terminal):"
+echo "  source \"$RC_FILE\""
